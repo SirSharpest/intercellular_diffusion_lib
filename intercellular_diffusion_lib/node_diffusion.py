@@ -2,6 +2,7 @@ import networkx as nx
 import pandas as pd
 import numpy as np
 import matplotlib.pyplot as plt
+from diffusion_functions import diffuse
 
 
 def do_node_diffusion(nodes, dx2, D, ts, pd_rate, b):
@@ -14,6 +15,47 @@ def do_node_diffusion(nodes, dx2, D, ts, pd_rate, b):
     u = nodes_to_array(nodes).copy()
     array_update_nodes(diffuse(u, dx2, D, pd_rate, b), nodes)
     return nodes
+
+
+def do_internode_diffusion(ic, dx2, D, dt, b, cell_um, points_per_cell, ts):
+    """
+    Takes an array, calculates cell mid points
+    performs diffusion with smaller dx than cell_um
+    returns tuple of nodes and of modified u
+
+    note: ic length must fit into cell_um for sake of simplicity
+    """
+
+    two_d = True
+    X, Y = ic.shape
+    half_cell = points_per_cell//2
+
+    if points_per_cell % 2 != 0:
+        raise ValueError('Bad value for points per cell, must be even!')
+    if X == 1 or Y == 1:
+        two_d = False
+        if max([X, Y]) % points_per_cell != 0:
+            raise ValueError('Bad shape for ic')
+    if two_d:
+        if X % cell_um != 0 or Y % points_per_cell != 0:
+            raise ValueError('Bad shape for ic')
+
+    # After performing checks...
+    u = ic.copy()
+    for _ in range(ts):
+        u = diffuse(u, dx2, D, b, dt)
+
+    if not two_d:
+        num_cells = int(max([X, Y]) // points_per_cell)
+        node_vals = np.array([u[i*points_per_cell:(i+1)*points_per_cell].mean()
+                              for i in range(num_cells)])
+
+    else:
+        raise Exception('Not implemented yet')
+        # node_vals = np.array([u[i*cell_um:i*cell_um+cell_um, j*cell_um:j*cell_um].sum()
+        #                     for i in range(X//cell_to_points_ratio) for j in range(Y//cell_to_points_ratio)])
+
+    return (node_vals, u)
 
 
 def nodes_to_array(nodes):

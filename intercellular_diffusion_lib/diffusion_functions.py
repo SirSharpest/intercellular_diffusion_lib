@@ -10,7 +10,7 @@ def D_eff(D, q, cell_um):
     return (D*q*cell_um)/(D+q*cell_um)
 
 
-def diffuse(u, dx2, D, pd_rate, b, dt):
+def diffuse(u, dx2, D, b, dt):
     un = u.copy()
     Y, X = un.shape
     # TODO: conn = connectivity(un, pd_rate)
@@ -71,12 +71,13 @@ def diffuse_4point(c0, D, x1, x2, y1, y2, dx2, b, dt):
     return c
 
 
-def pd_perm(x, pd_rate=0):
-    return x*pd_rate
+# These funcs are currently dead due to deprecation of pd_rate
+# def pd_perm(x, pd_rate=0):
+#     return x*pd_rate
 
 
-def connectivity(c, pd_rate):
-    """
-    Returns a connectivity mask for the current cell array
-    """
-    return pd_perm(np.ones(c.shape), pd_rate=pd_rate)
+# def connectivity(c, pd_rate):
+#     """
+#     Returns a connectivity mask for the current cell array
+#     """
+#     return pd_perm(np.ones(c.shape), pd_rate=pd_rate)
