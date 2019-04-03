@@ -2,7 +2,7 @@ import networkx as nx
 import pandas as pd
 import numpy as np
 import matplotlib.pyplot as plt
-from diffusion_functions import diffuse
+from intercellular_diffusion_lib.diffusion_functions import diffuse
 
 
 def do_node_diffusion(nodes, dx2, D, ts, pd_rate, b):
@@ -17,7 +17,7 @@ def do_node_diffusion(nodes, dx2, D, ts, pd_rate, b):
     return nodes
 
 
-def do_internode_diffusion(ic, dx2, D, dt, b, cell_um, points_per_cell, ts):
+def do_internode_diffusion(ic, dx2, D, dt, b, points_per_cell, ts):
     """
     Takes an array, calculates cell mid points
     performs diffusion with smaller dx than cell_um
@@ -28,7 +28,6 @@ def do_internode_diffusion(ic, dx2, D, dt, b, cell_um, points_per_cell, ts):
 
     two_d = True
     X, Y = ic.shape
-    half_cell = points_per_cell//2
 
     if points_per_cell % 2 != 0:
         raise ValueError('Bad value for points per cell, must be even!')
@@ -37,7 +36,7 @@ def do_internode_diffusion(ic, dx2, D, dt, b, cell_um, points_per_cell, ts):
         if max([X, Y]) % points_per_cell != 0:
             raise ValueError('Bad shape for ic')
     if two_d:
-        if X % cell_um != 0 or Y % points_per_cell != 0:
+        if X % points_per_cell != 0 or Y % points_per_cell != 0:
             raise ValueError('Bad shape for ic')
 
     # After performing checks...
@@ -49,12 +48,16 @@ def do_internode_diffusion(ic, dx2, D, dt, b, cell_um, points_per_cell, ts):
         num_cells = int(max([X, Y]) // points_per_cell)
         node_vals = np.array([u[i*points_per_cell:(i+1)*points_per_cell].mean()
                               for i in range(num_cells)])
-
     else:
-        raise Exception('Not implemented yet')
-        # node_vals = np.array([u[i*cell_um:i*cell_um+cell_um, j*cell_um:j*cell_um].sum()
-        #                     for i in range(X//cell_to_points_ratio) for j in range(Y//cell_to_points_ratio)])
-
+        if X != Y:
+            raise Exception('Uneven axis is not supported yet')
+        num_cells = int(max([X, Y]) // points_per_cell)
+        node_vals = np.array([np.mean(
+            u[y*points_per_cell:(y+1)*points_per_cell, x *
+              points_per_cell:(x+1)*points_per_cell])
+            for y in range(num_cells)
+            for x in range(num_cells)]).reshape((num_cells,
+                                                 num_cells))
     return (node_vals, u)
 
 
@@ -78,7 +81,8 @@ def array_update_nodes(arr, nodes):
 
 def array_to_nodes(arr):
     Y, X = arr.shape
-    return np.array([[Node(x, y, arr[y, x]) for x in range(0, X)] for y in range(0, Y)])
+    return np.array([[Node(x, y, arr[y, x])
+                      for x in range(0, X)] for y in range(0, Y)])
 
 
 class Node:
@@ -111,14 +115,12 @@ def array_normalise(arr):
     return arr/arr.sum()
 
 
-def draw_as_network(nodes, ax, draw_labels=False, title=''):
+def make_networkX(nodes):
     G = nx.Graph()
     Y, X = nodes.shape
-    ax.grid(False)
     arr = array_normalise(nodes_to_array(nodes))
     sizes = np.zeros(nodes.shape)
     labels = {}
-    log_scale = 1024
     cut_off_of_interest = 1e-4
     pos = {}
     for y in range(0, Y):
@@ -138,6 +140,23 @@ def draw_as_network(nodes, ax, draw_labels=False, title=''):
             labels[cur_node] = "~{0:.2f}".format(
                 np.around(lbl, 4)*100) if lbl > cut_off_of_interest else ''
 
+    # TODO
+    # Adding attributes outside of main loop, in efficent and needs corrected
+    for node, (x, y) in pos.items():
+        G.node[node]['x'] = float(x)*200
+        G.node[node]['y'] = float(y)*200
+        G.node[node]['C'] = arr[y, x]
+
+    return (G, pos, labels)
+
+
+def draw_as_network(nodes, ax, draw_labels=False, title=''):
+
+    G, pos, labels = make_networkX(nodes)
+    Y, X = nodes.shape
+    sizes = np.zeros(nodes.shape)
+
+    ax.grid(False)
     with np.errstate(divide='ignore'):
         sizes = sizes.ravel()*10000
 
@@ -147,7 +166,7 @@ def draw_as_network(nodes, ax, draw_labels=False, title=''):
         new_sizes[idx] = sizes[i]
 
     # nodes
-    nx.draw_networkx_nodes(G, pos, node_size=new_sizes, ax=ax)
+    nx.draw_networkx_nodes(G, pos, node_size=100, ax=ax)
 
     # Decide nodes
     # e_on = [(u, v) for (u, v, d) in G.edges(data=True) if d['weight'] > 0]
@@ -155,11 +174,9 @@ def draw_as_network(nodes, ax, draw_labels=False, title=''):
 
     nx.draw_networkx_edges(G, pos,
                            width=1, edge_color='b', ax=ax)
-
     if draw_labels:
         nx.draw_networkx_labels(G, pos, font_size=7,
                                 font_family='sans-serif', labels=labels, ax=ax)
-
     ax.set_xlim(-1, X)
     ax.set_ylim(-1, Y)
     ax.set_title(title)
